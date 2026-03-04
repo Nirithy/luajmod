@@ -48,6 +48,17 @@ public class AstDecompiler {
         }
     }
 
+    public static class RecursiveCallMarker extends AstNode {
+        public String funcName;
+        public RecursiveCallMarker(String funcName) {
+            this.funcName = funcName;
+        }
+        @Override
+        public String format(int indent) {
+            return getIndent(indent) + "-- [RECURSIVE CALL TO: " + funcName + "]";
+        }
+    }
+
     public static class Call extends AstNode {
         public String function;
         public List<String> args;
@@ -439,6 +450,10 @@ public class AstDecompiler {
                         String funcName = vars[a];
                         if (funcName == null) funcName = "v" + a;
 
+                        if (funcName != null && name != null && funcName.contains(name)) {
+                            rootBlock.statements.add(new RecursiveCallMarker(funcName));
+                        }
+
                         if (c == 0) {
                             rootBlock.statements.add(new Call(funcName, callArgs, "v" + a + "_varargs"));
                         } else if (c == 1) {
@@ -465,6 +480,11 @@ public class AstDecompiler {
                         }
                         String tailFuncName = vars[a];
                         if (tailFuncName == null) tailFuncName = "v" + a;
+
+                        if (tailFuncName != null && name != null && tailFuncName.contains(name)) {
+                            rootBlock.statements.add(new RecursiveCallMarker(tailFuncName));
+                        }
+
                         Call tailCall = new Call(tailFuncName, tailArgs, "");
                         rootBlock.statements.add(new RawLuaStmt("return " + tailCall.format(0).trim()));
                         break;
@@ -503,7 +523,21 @@ public class AstDecompiler {
                         rootBlock.statements.add(new WhileStmt("v" + (a+1) + " ~= nil", tforBlock));
                         break;
                     case Lua.OP_SETLIST:
-                        rootBlock.statements.add(new RawLuaStmt("-- SETLIST omitted for runnable pseudo code"));
+                        int limit = b == 0 ? 0 : b; // if b == 0, it means the list length is up to the top of the stack (dynamic).
+                        int startBatch = c == 0 ? code[pc + 1] : c; // c is the batch block number, or EXTRAARG if c == 0
+
+                        StringBuilder sbList = new StringBuilder();
+                        if (limit == 0) {
+                            sbList.append("v" + (a+1) + " ... top");
+                        } else {
+                            for (int j = 1; j <= limit; j++) {
+                                if (j > 1) sbList.append(", ");
+                                sbList.append(vars[a + j]);
+                            }
+                        }
+                        rootBlock.statements.add(new RawLuaStmt("-- SETLIST (table index rebuilding): populate " + vars[a] + " with [" + sbList.toString() + "] (batch " + startBatch + ")"));
+
+                        if (c == 0) pc++; // Skip EXTRAARG
                         break;
                     case Lua.OP_CLOSURE:
                         vars[a] = "closure_" + bx;
