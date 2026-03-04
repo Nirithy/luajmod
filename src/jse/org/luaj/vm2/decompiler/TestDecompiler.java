@@ -102,6 +102,29 @@ public class TestDecompiler {
                 System.out.println("加载文件: " + filePath);
                 System.out.println("共发现 " + functionList.size() + " 个函数\n");
                 
+                LuaValue.s_tolerantMode = true; // 开启底层极度宽容模式
+
+                System.out.println("========== 自动全量分析 ==========");
+                for (PrototypeInfo info : functionList) {
+                    System.out.println("\n--- 反汇编函数 #" + info.id + ": " + info.name + " ---");
+                    disassembleToConsole(info.prototype, info.name);
+
+                    System.out.println("\n--- 还原伪代码 #" + info.id + ": " + info.name + " ---");
+                    System.out.println(PseudoCompiler.decompile(info.prototype));
+                }
+
+                if (scanner == null) scanner = new Scanner(System.in);
+                if (execGlobals == null) {
+                    execGlobals = JsePlatform.standardGlobals();
+                    setupExecGlobals();
+                }
+
+                System.out.println("\n========== 自动伪执行 (捕获行为和字符串) ==========");
+                runAllFunctions();
+
+                System.out.println("\n========== 自动真执行 (宽容模式) ==========");
+                execAllFunctions();
+
                 // 进入交互模式
                 runInteractiveMode(filePath);
                 
@@ -139,10 +162,27 @@ public class TestDecompiler {
             
             System.out.println("共发现 " + functionList.size() + " 个函数\n");
             
+            LuaValue.s_tolerantMode = true; // 开启底层极度宽容模式
+
+            System.out.println("========== 自动全量分析 ==========");
+            for (PrototypeInfo info : functionList) {
+                System.out.println("\n--- 反汇编函数 #" + info.id + ": " + info.name + " ---");
+                disassembleToConsole(info.prototype, info.name);
+
+                System.out.println("\n--- 还原伪代码 #" + info.id + ": " + info.name + " ---");
+                System.out.println(PseudoCompiler.decompile(info.prototype));
+            }
+
             // 进入交互模式
-            scanner = new Scanner(System.in);
-            execGlobals = JsePlatform.standardGlobals();
-            setupExecGlobals();
+            if (scanner == null) scanner = new Scanner(System.in);
+            if (execGlobals == null) {
+                execGlobals = JsePlatform.standardGlobals();
+                setupExecGlobals();
+            }
+
+            System.out.println("\n========== 自动真执行 (宽容模式) ==========");
+            execAllFunctions();
+
             runInteractiveMode(chunkname);
             
         } catch (Exception e) {
@@ -171,11 +211,11 @@ public class TestDecompiler {
      * 交互模式
      */
     private static void runInteractiveMode(String filePath) {
-        scanner = new Scanner(System.in);
-        
-        // 创建执行用的全局环境
-        execGlobals = JsePlatform.standardGlobals();
-        setupExecGlobals();
+        if (scanner == null) scanner = new Scanner(System.in);
+        if (execGlobals == null) {
+            execGlobals = JsePlatform.standardGlobals();
+            setupExecGlobals();
+        }
         
         while (true) {
             System.out.println("\n========== 命令菜单 ==========");
