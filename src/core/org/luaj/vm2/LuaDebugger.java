@@ -2,6 +2,7 @@ package org.luaj.vm2;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -60,6 +61,9 @@ public class LuaDebugger {
     private List<String> commandHistory = new ArrayList<>();
     private int historyIndex = 0;
     
+    // ==================== 帧导航 ====================
+    private int selectedFrameIndex = 0;
+
     // ==================== 执行日志 ====================
     private boolean loggingEnabled = false;
     private List<String> executionLog = new ArrayList<>();
@@ -337,13 +341,15 @@ public class LuaDebugger {
             System.out.println("╠────────────────────────────────────────────────────────────╣");
             System.out.println("║ 监视:");
             for (Map.Entry<String, LuaValue> entry : watchList.entrySet()) {
-                LuaValue val = globalEnv != null ? globalEnv.get(entry.getKey()) : LuaValue.NIL;
-                System.out.println("║   " + padRight(entry.getKey() + " = " + truncate(val.tojstring(), 35), 54) + "║");
+                String expr = entry.getKey();
+                LuaValue val = evaluateExpression(expr);
+                System.out.println("║   " + padRight(expr + " = " + truncate(val.tojstring(), 35), 54) + "║");
             }
         }
         
         System.out.println("╚════════════════════════════════════════════════════════════╝");
         
+        selectedFrameIndex = 0; // reset selected frame to the top
         commandLoop();
     }
     
@@ -442,6 +448,19 @@ public class LuaDebugger {
                         showStack();
                         break;
                         
+                    case "up":
+                        navigateFrame(1);
+                        break;
+
+                    case "down":
+                        navigateFrame(-1);
+                        break;
+
+                    case "frame":
+                    case "f":
+                        selectFrame(arg);
+                        break;
+
                     case "env":
                     case "globals":
                         showEnv();
@@ -466,6 +485,11 @@ public class LuaDebugger {
                         addInterceptor(arg);
                         break;
                         
+                    case "print":
+                    case "p":
+                        printVariable(arg);
+                        break;
+
                     case "dump":
                         dumpState();
                         break;
@@ -530,7 +554,10 @@ public class LuaDebugger {
         System.out.println();
         System.out.println("【信息查看】");
         System.out.println("  stack / bt        - 显示调用栈");
+        System.out.println("  up / down         - 在调用栈中上下移动");
+        System.out.println("  frame / f [n]     - 切换到指定栈帧");
         System.out.println("  env               - 显示全局环境");
+        System.out.println("  print / p [name]  - 漂亮地打印变量或表");
         System.out.println("  eval code         - 执行Lua代码");
         System.out.println("  log               - 显示执行日志");
         System.out.println("  dump              - 导出当前状态");
@@ -607,19 +634,42 @@ public class LuaDebugger {
         }
         
         // 显示局部变量（如果有栈帧）
-        if (!callStack.isEmpty() && currentStack != null) {
-            System.out.println("\n=== 局部变量 ===");
-            CallFrame frame = callStack.peek();
-            if (frame.closure.p != null) {
-                Prototype p = frame.closure.p;
-                if (p.locvars != null) {
+        if (!callStack.isEmpty()) {
+            System.out.println("\n=== 局部变量 (帧 #" + selectedFrameIndex + ") ===");
+            CallFrame frame = callStack.get(selectedFrameIndex);
+
+            // Note: For frames other than the top frame (0), we don't know the exact PC or stack easily
+            // since currentPc and currentStack are for the top frame. We can only show arguments.
+            if (selectedFrameIndex > 0) {
+                if (frame.args != null) {
+                    for (int i = 1; i <= frame.args.narg(); i++) {
+                        System.out.println("  arg" + i + " = " + truncate(frame.args.arg(i).tojstring(), 50));
+                    }
+                } else {
+                    System.out.println("  (无法获取此帧的局部变量)");
+                }
+            } else if (currentStack != null) {
+                if (frame.closure.p != null && frame.closure.p.locvars != null) {
+                    Prototype p = frame.closure.p;
                     for (int i = 0; i < p.locvars.length; i++) {
                         LocVars lv = p.locvars[i];
-                        if (lv.varname != null) {
-                            int slot = lv.startpc;
-                            if (slot >= 0 && slot < currentStack.length) {
+                        if (lv.varname != null && currentPc >= lv.startpc && currentPc < lv.endpc) {
+                            // Find which register this variable is in
+                            // The register is basically its index among active local variables
+                            // but in LuaJ, locvars are typically ordered by startpc and map to registers
+                            // based on scope.
+                            // Let's find the register index for this local variable.
+                            int reg = 0;
+                            for (int j = 0; j < p.locvars.length; j++) {
+                                LocVars other = p.locvars[j];
+                                if (other == lv) break;
+                                if (other.startpc <= currentPc && currentPc < other.endpc) {
+                                    reg++;
+                                }
+                            }
+                            if (reg >= 0 && reg < currentStack.length) {
                                 System.out.println("  " + lv.varname.tojstring() + " = " + 
-                                    truncate(currentStack[slot].tojstring(), 50));
+                                    truncate(currentStack[reg].tojstring(), 50));
                             }
                         }
                     }
@@ -628,6 +678,123 @@ public class LuaDebugger {
         }
     }
     
+    private void printVariable(String name) {
+        if (globalEnv == null) {
+            System.out.println("全局环境未设置");
+            return;
+        }
+
+        if (name.isEmpty()) {
+            System.out.println("用法: print <变量名或表>");
+            return;
+        }
+
+        // Parse variable path
+        String[] parts = name.split("\\.");
+        LuaValue val = null;
+
+        // Try checking local variables first
+        if (!callStack.isEmpty() && currentStack != null) {
+            CallFrame frame = callStack.peek();
+            if (frame.closure.p != null && frame.closure.p.locvars != null) {
+                Prototype p = frame.closure.p;
+                int reg = 0;
+                for (int i = 0; i < p.locvars.length; i++) {
+                    LocVars lv = p.locvars[i];
+                    if (lv.varname != null && currentPc >= lv.startpc && currentPc < lv.endpc) {
+                        int r = 0;
+                        for (int j = 0; j < p.locvars.length; j++) {
+                            LocVars other = p.locvars[j];
+                            if (other == lv) break;
+                            if (other.startpc <= currentPc && currentPc < other.endpc) {
+                                r++;
+                            }
+                        }
+                        if (r >= 0 && r < currentStack.length && parts[0].equals(lv.varname.tojstring())) {
+                            val = currentStack[r];
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // If not found in locals, check globals
+        if (val == null) {
+            val = globalEnv;
+            for (String part : parts) {
+                if (val.istable()) {
+                    val = val.get(part);
+                } else {
+                    val = LuaValue.NIL;
+                    break;
+                }
+            }
+        } else {
+            // we found it in locals, now traverse the rest of parts if any
+            for (int i = 1; i < parts.length; i++) {
+                if (val != null && val.istable()) {
+                    val = val.get(parts[i]);
+                } else {
+                    val = LuaValue.NIL;
+                    break;
+                }
+            }
+        }
+
+        if (val == null || val.isnil()) {
+            System.out.println("变量 '" + name + "' 不存在或为nil");
+            return;
+        }
+
+        System.out.println(name + " = " + prettyPrint(val, 0, new HashSet<>()));
+    }
+
+    private String prettyPrint(LuaValue val, int depth, Set<LuaValue> visited) {
+        if (val == null) return "null";
+        if (val.isnil()) return "nil";
+        if (val.isboolean()) return val.toboolean() ? "true" : "false";
+        if (val.isnumber()) return val.tojstring();
+        if (val.isstring()) return "\"" + val.tojstring() + "\"";
+        if (val.isfunction()) return "function(...)";
+
+        if (val.istable()) {
+            if (visited.contains(val)) {
+                return "<recursive table>";
+            }
+            if (depth > 5) {
+                return "{ ... }";
+            }
+
+            visited.add(val);
+            LuaTable t = (LuaTable) val;
+            StringBuilder sb = new StringBuilder();
+            sb.append("{\n");
+            String indent = "  ".repeat(depth + 1);
+
+            LuaValue k = LuaValue.NIL;
+            while (true) {
+                Varargs n = t.next(k);
+                if ((k = n.arg1()).isnil()) break;
+                LuaValue v = n.arg(2);
+
+                sb.append(indent);
+                if (k.type() == LuaValue.TSTRING && k.tojstring().matches("^[a-zA-Z_][a-zA-Z0-9_]*$")) {
+                    sb.append(k.tojstring());
+                } else {
+                    sb.append("[").append(prettyPrint(k, depth + 1, visited)).append("]");
+                }
+                sb.append(" = ").append(prettyPrint(v, depth + 1, visited)).append(",\n");
+            }
+
+            visited.remove(val);
+            sb.append("  ".repeat(depth)).append("}");
+            return sb.toString();
+        }
+
+        return "<" + val.typename() + ">";
+    }
+
     private void setVariable(String arg) {
         if (arg.isEmpty()) {
             System.out.println("用法: set name=value");
@@ -736,7 +903,7 @@ public class LuaDebugger {
             }
             
             try {
-                LuaValue func = globalEnv.load(codeStr, "debugger");
+                LuaValue func = globalEnv.load(new StringReader(codeStr), "debugger");
                 replacements.put("func:" + name, func);
                 System.out.println("函数已替换: " + name);
             } catch (Exception e) {
@@ -753,15 +920,73 @@ public class LuaDebugger {
         }
     }
     
+    private LuaValue evaluateExpression(String code) {
+        if (globalEnv == null) return LuaValue.NIL;
+
+        try {
+            String codeToRun = code.trim();
+            if (!codeToRun.contains("return") && !codeToRun.contains("print") &&
+                !codeToRun.contains("=") && !codeToRun.startsWith("function")) {
+                codeToRun = "return " + codeToRun;
+            }
+
+            // Build a custom environment for evaluation
+            LuaTable evalEnv = new LuaTable();
+
+            // Populate it with current active local variables for the selected frame
+            if (!callStack.isEmpty()) {
+                CallFrame frame = callStack.get(selectedFrameIndex);
+                if (selectedFrameIndex == 0 && currentStack != null) {
+                    if (frame.closure.p != null && frame.closure.p.locvars != null) {
+                        Prototype p = frame.closure.p;
+                        for (int i = 0; i < p.locvars.length; i++) {
+                            LocVars lv = p.locvars[i];
+                            if (lv.varname != null && currentPc >= lv.startpc && currentPc < lv.endpc) {
+                                int r = 0;
+                                for (int j = 0; j < p.locvars.length; j++) {
+                                    LocVars other = p.locvars[j];
+                                    if (other == lv) break;
+                                    if (other.startpc <= currentPc && currentPc < other.endpc) {
+                                        r++;
+                                    }
+                                }
+                                if (r >= 0 && r < currentStack.length) {
+                                    evalEnv.set(lv.varname.tojstring(), currentStack[r] != null ? currentStack[r] : LuaValue.NIL);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Set metatable to fallback to globalEnv
+            LuaTable mt = new LuaTable();
+            mt.set(LuaValue.INDEX, globalEnv);
+            mt.set(LuaValue.NEWINDEX, new LuaFunction() {
+                @Override
+                public LuaValue call(LuaValue arg1, LuaValue arg2, LuaValue arg3) {
+                    globalEnv.set(arg2, arg3);
+                    return LuaValue.NONE;
+                }
+            });
+            evalEnv.setmetatable(mt);
+
+            LuaValue result = globalEnv.load(new StringReader(codeToRun), "debugger", evalEnv).call();
+            return result;
+        } catch (Exception e) {
+            return LuaValue.valueOf("Error: " + e.getMessage());
+        }
+    }
+
     private void addWatch(String arg) {
         if (arg.isEmpty()) {
             if (watchList.isEmpty()) {
                 System.out.println("监视列表为空");
             } else {
                 System.out.println("监视列表:");
-                for (String name : watchList.keySet()) {
-                    LuaValue val = globalEnv != null ? globalEnv.get(name) : LuaValue.NIL;
-                    System.out.println("  " + name + " = " + truncate(val.tojstring(), 50));
+                for (String expr : watchList.keySet()) {
+                    LuaValue val = evaluateExpression(expr);
+                    System.out.println("  " + expr + " = " + truncate(val.tojstring(), 50));
                 }
             }
         } else {
@@ -795,7 +1020,7 @@ public class LuaDebugger {
             int line = frame.closure.p != null && frame.closure.p.lineinfo != null && frame.closure.p.lineinfo.length > 0 ?
                 frame.closure.p.lineinfo[0] : -1;
             
-            String marker = (i == 0) ? "=>" : "  ";
+            String marker = (i == selectedFrameIndex) ? "=>" : "  ";
             System.out.println(marker + " #" + i + " " + name + " (" + file + ":" + line + ")");
             
             // 显示参数
@@ -816,6 +1041,44 @@ public class LuaDebugger {
         System.out.println("==============");
     }
     
+    private void navigateFrame(int offset) {
+        if (callStack.isEmpty()) {
+            System.out.println("调用栈为空");
+            return;
+        }
+
+        int newIndex = selectedFrameIndex + offset;
+        if (newIndex < 0) {
+            System.out.println("已经是栈顶帧");
+        } else if (newIndex >= callStack.size()) {
+            System.out.println("已经是栈底帧");
+        } else {
+            selectedFrameIndex = newIndex;
+            System.out.println("已切换到栈帧 #" + selectedFrameIndex);
+            showVariables(""); // Automatically show variables for the new frame
+        }
+    }
+
+    private void selectFrame(String arg) {
+        if (arg.isEmpty()) {
+            System.out.println("当前选中的栈帧: #" + selectedFrameIndex);
+            return;
+        }
+
+        try {
+            int index = Integer.parseInt(arg.trim());
+            if (index < 0 || index >= callStack.size()) {
+                System.out.println("无效的栈帧索引 (可用范围: 0 ~ " + (callStack.size() - 1) + ")");
+            } else {
+                selectedFrameIndex = index;
+                System.out.println("已切换到栈帧 #" + selectedFrameIndex);
+                showVariables("");
+            }
+        } catch (NumberFormatException e) {
+            System.out.println("无效的栈帧索引: " + arg);
+        }
+    }
+
     private void showEnv() {
         if (globalEnv == null) {
             System.out.println("全局环境未设置");
@@ -963,20 +1226,20 @@ public class LuaDebugger {
         }
         
         try {
-            String codeToRun = code.trim();
-            if (!codeToRun.contains("return") && !codeToRun.contains("print") && 
-                !codeToRun.contains("=") && !codeToRun.startsWith("function")) {
-                codeToRun = "return " + codeToRun;
-            }
-            
-            LuaValue result = globalEnv.load(codeToRun, "debugger").call();
+            LuaValue result = evaluateExpression(code);
             if (!result.isnil()) {
                 System.out.println("结果: " + result.tojstring());
             }
         } catch (Exception e) {
             // 尝试作为语句执行
             try {
-                globalEnv.load(code, "debugger").call();
+                // We shouldn't duplicate the environment building block again,
+                // but for simplicity we will just rely on the fallback that globalEnv handles eval.
+                // It's a statement, so we can run it in evalEnv too.
+                // We'll rebuild evalEnv to ensure local variables are correctly mutated if needed.
+                // However, our local variables are just copied, changing them won't affect the real locals directly.
+                // We leave it to globalEnv for now to avoid complexity, since statements are usually global updates.
+                globalEnv.load(new StringReader(code), "debugger").call();
                 System.out.println("执行成功");
             } catch (Exception e2) {
                 System.out.println("错误: " + e2.getMessage());
