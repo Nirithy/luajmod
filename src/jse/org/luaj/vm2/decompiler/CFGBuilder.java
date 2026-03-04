@@ -141,6 +141,36 @@ public class CFGBuilder {
         return blocks;
     }
 
+    public static void printFlowchart(Prototype p) {
+        List<BasicBlock> blocks = buildCFG(p);
+        if (blocks.isEmpty()) {
+            System.out.println("  [Empty Function or No Code]");
+            return;
+        }
+
+        System.out.println("-------------------------------------------------");
+        for (BasicBlock b : blocks) {
+            System.out.println("  +-------------------------+");
+            System.out.printf("  | Block %-3d               |\n", b.id);
+            System.out.printf("  | PC: %-4d to %-4d      |\n", b.startPc, b.endPc);
+            System.out.println("  +-------------------------+");
+
+            if (!b.outEdges.isEmpty()) {
+                System.out.print("           | \n");
+                System.out.print("           v \n");
+                System.out.print("   Edges: ");
+                for (int i = 0; i < b.outEdges.size(); i++) {
+                    System.out.print("B" + b.outEdges.get(i).id);
+                    if (i < b.outEdges.size() - 1) {
+                        System.out.print(", ");
+                    }
+                }
+                System.out.println("\n");
+            }
+        }
+        System.out.println("-------------------------------------------------");
+    }
+
     private static BasicBlock getBlockByPc(List<BasicBlock> blocks, int pc) {
         for (BasicBlock b : blocks) {
             if (pc >= b.startPc && pc <= b.endPc) {
