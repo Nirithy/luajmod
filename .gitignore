@@ -1,0 +1,15 @@
+bin/
+target/
+build/
+lib/
+jit/
+*.ser
+*.gz
+*.jar
+*.lua
+*.out
+*.tar
+*.txt
+*.zip
+docs
+*.0
