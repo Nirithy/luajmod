@@ -677,7 +677,7 @@ public class LuaClosure extends LuaFunction {
 							globals.instructionHook.onPostInstruction(oldPc, i, this, stack);
 						}
 					}
-				} catch (Exception ex) {
+				} catch (Throwable ex) {
 					if (tolerantMode) {
 						System.err.println("[TolerantVM] 异常被忽略: PC=" + pc + ", 指令=" + (code[pc] & 0x3f) + ", 错误: " + ex.getMessage());
 						// 尝试为目标寄存器设置 Dummy 值以避免级联错误
@@ -703,10 +703,12 @@ public class LuaClosure extends LuaFunction {
 				}
 			}
 		} catch ( LuaError le ) {
+			if (tolerantMode) return NONE;
 			if (le.traceback == null)
 				processErrorHooks(le, p, pc);
 			throw le;
 		} catch ( ArrayIndexOutOfBoundsException e ) {
+			if (tolerantMode) return NONE;
 			LuaError le = new LuaError("数组越界: " + e.getMessage() + 
 				"\n  [PC] " + pc + 
 				"\n  [指令] " + Integer.toHexString(code[pc-1]) +
@@ -716,6 +718,7 @@ public class LuaClosure extends LuaFunction {
 			processErrorHooks(le, p, pc);
 			throw le;
 		} catch ( Exception e ) {
+			if (tolerantMode) return NONE;
 			LuaError le = new LuaError(e);
 			processErrorHooks(le, p, pc);
 			throw le;

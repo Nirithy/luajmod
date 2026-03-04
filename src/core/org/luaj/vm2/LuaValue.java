@@ -1057,7 +1057,10 @@ public class LuaValue extends Varargs {
 	 * @param message String providing message details
 	 * @throws LuaError in all cases
 	 */
-	public static LuaValue error(String message) { throw new LuaError(message); }
+	public static LuaValue error(String message) {
+		if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("Error_" + message);
+		throw new LuaError(message);
+	}
 
 	/**
 	 * Assert a condition is true, or throw a {@link LuaError} if not
@@ -1104,21 +1107,30 @@ public class LuaValue extends Varargs {
 	 * Throw a {@link LuaError} indicating an operation is not implemented
 	 * @throws LuaError in all cases
 	 */
-	protected LuaValue unimplemented(String fun) { throw new LuaError("'"+fun+"' not implemented for "+typename()); }
+	protected LuaValue unimplemented(String fun) {
+		if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("Error");
+		throw new LuaError("'"+fun+"' not implemented for "+typename());
+	}
 	
 	/**
 	 * Throw a {@link LuaError} indicating an illegal operation occurred,
 	 * typically involved in managing weak references
 	 * @throws LuaError in all cases
 	 */
-	protected LuaValue illegal(String op,String typename) { throw new LuaError("illegal operation '"+op+"' for "+typename); }
+	protected LuaValue illegal(String op,String typename) {
+		if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("Error");
+		throw new LuaError("illegal operation '"+op+"' for "+typename);
+	}
 	
 	/**
 	 * Throw a {@link LuaError} based on the len operator,
 	 * typically due to an invalid operand type
 	 * @throws LuaError in all cases
 	 */
-	protected LuaValue lenerror() { throw new LuaError("attempt to get length of "+typename()); }
+	protected LuaValue lenerror() {
+		if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("LenError");
+		throw new LuaError("attempt to get length of "+typename());
+	}
 	
 	/**
 	 * Throw a {@link LuaError} based on an arithmetic error such as add, or pow,
@@ -1147,7 +1159,10 @@ public class LuaValue extends Varargs {
 	 * @param rhs String description of what was on the right-hand-side of the comparison that resulted in the error.
 	 * @throws LuaError in all cases
 	 */
-	protected LuaValue compareerror(String rhs) { throw new LuaError("attempt to compare "+typename()+" with "+rhs); }
+	protected LuaValue compareerror(String rhs) {
+		if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("CompareError");
+		throw new LuaError("attempt to compare "+typename()+" with "+rhs);
+	}
 	
 	/**
 	 * Throw a {@link LuaError} based on a comparison error such as greater-than or less-than,
@@ -1155,7 +1170,10 @@ public class LuaValue extends Varargs {
 	 * @param rhs Right-hand-side of the comparison that resulted in the error.
 	 * @throws LuaError in all cases
 	 */
-	protected LuaValue compareerror(LuaValue rhs) { throw new LuaError("attempt to compare "+typename()+" with "+rhs.typename()); }
+	protected LuaValue compareerror(LuaValue rhs) {
+		if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("CompareError");
+		throw new LuaError("attempt to compare "+typename()+" with "+rhs.typename());
+	}
 	
 	/** Get a value in a table including metatag processing using {@link #INDEX}.
 	 * @param key the key to look up, must not be {@link #NIL} or null
@@ -3562,6 +3580,7 @@ public class LuaValue extends Varargs {
 	 * @throws LuaError when called.
 	 */
     private void indexerror(String key) {
+		if (s_tolerantMode) return;
 		String valueInfo = this.tojstring();
 		if (valueInfo.length() > 100) {
 			valueInfo = valueInfo.substring(0, 100) + "...";
