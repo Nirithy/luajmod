@@ -1,9 +1,154 @@
 package org.luaj.vm2.decompiler;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 import org.luaj.vm2.Lua;
 import org.luaj.vm2.Prototype;
 
 public class CFGBuilder {
+
+    public static class BasicBlock {
+        public int id;
+        public int startPc;
+        public int endPc;
+        public List<BasicBlock> inEdges = new ArrayList<>();
+        public List<BasicBlock> outEdges = new ArrayList<>();
+
+        public BasicBlock(int id, int startPc, int endPc) {
+            this.id = id;
+            this.startPc = startPc;
+            this.endPc = endPc;
+        }
+    }
+
+    public static List<BasicBlock> buildCFG(Prototype p) {
+        if (p == null || p.code == null) {
+            return new ArrayList<>();
+        }
+
+        int[] code = p.code;
+        int len = code.length;
+
+        Set<Integer> leaderPcs = new HashSet<>();
+        leaderPcs.add(0); // The first instruction is always a leader
+
+        // Find all leaders
+        for (int pc = 0; pc < len; pc++) {
+            int i = code[pc];
+            int opcode = Lua.GET_OPCODE(i);
+
+            switch (opcode) {
+                case Lua.OP_JMP:
+                case Lua.OP_FORLOOP:
+                case Lua.OP_FORPREP:
+                case Lua.OP_TFORLOOP:
+                    int sbx = Lua.GETARG_sBx(i);
+                    int targetPc = pc + 1 + sbx;
+                    if (targetPc < len) {
+                        leaderPcs.add(targetPc);
+                    }
+                    if (pc + 1 < len) {
+                        leaderPcs.add(pc + 1);
+                    }
+                    break;
+                case Lua.OP_EQ:
+                case Lua.OP_LT:
+                case Lua.OP_LE:
+                case Lua.OP_TEST:
+                case Lua.OP_TESTSET:
+                    // These are conditional jumps. The next instruction is ALWAYS a JMP in Lua 5.2/5.3
+                    if (pc + 1 < len) {
+                        leaderPcs.add(pc + 1);
+                    }
+                    if (pc + 2 < len) {
+                        leaderPcs.add(pc + 2);
+                    }
+                    break;
+                case Lua.OP_RETURN:
+                case Lua.OP_TAILCALL:
+                    if (pc + 1 < len) {
+                        leaderPcs.add(pc + 1);
+                    }
+                    break;
+            }
+        }
+
+        List<Integer> sortedLeaders = new ArrayList<>(leaderPcs);
+        Collections.sort(sortedLeaders);
+
+        List<BasicBlock> blocks = new ArrayList<>();
+        for (int i = 0; i < sortedLeaders.size(); i++) {
+            int start = sortedLeaders.get(i);
+            int end = (i + 1 < sortedLeaders.size()) ? sortedLeaders.get(i + 1) - 1 : len - 1;
+            blocks.add(new BasicBlock(i, start, end));
+        }
+
+        // Add edges
+        for (BasicBlock block : blocks) {
+            int lastPc = block.endPc;
+            int inst = code[lastPc];
+            int opcode = Lua.GET_OPCODE(inst);
+
+            boolean fallsThrough = true;
+
+            switch (opcode) {
+                case Lua.OP_JMP:
+                case Lua.OP_FORLOOP:
+                case Lua.OP_FORPREP:
+                case Lua.OP_TFORLOOP:
+                    int sbx = Lua.GETARG_sBx(inst);
+                    int targetPc = lastPc + 1 + sbx;
+                    BasicBlock targetBlock = getBlockByPc(blocks, targetPc);
+                    if (targetBlock != null) {
+                        block.outEdges.add(targetBlock);
+                        targetBlock.inEdges.add(block);
+                    }
+                    if (opcode == Lua.OP_JMP) {
+                        fallsThrough = false; // unconditional jump
+                    }
+                    break;
+                case Lua.OP_EQ:
+                case Lua.OP_LT:
+                case Lua.OP_LE:
+                case Lua.OP_TEST:
+                case Lua.OP_TESTSET:
+                    // Conditionals skip the next instruction if true, so target is pc + 2
+                    BasicBlock skipTargetBlock = getBlockByPc(blocks, lastPc + 2);
+                    if (skipTargetBlock != null) {
+                        block.outEdges.add(skipTargetBlock);
+                        skipTargetBlock.inEdges.add(block);
+                    }
+                    break;
+                case Lua.OP_RETURN:
+                case Lua.OP_TAILCALL:
+                    fallsThrough = false;
+                    break;
+            }
+
+            if (fallsThrough && lastPc + 1 < len) {
+                BasicBlock nextBlock = getBlockByPc(blocks, lastPc + 1);
+                if (nextBlock != null) {
+                    block.outEdges.add(nextBlock);
+                    nextBlock.inEdges.add(block);
+                }
+            }
+        }
+
+        return blocks;
+    }
+
+    private static BasicBlock getBlockByPc(List<BasicBlock> blocks, int pc) {
+        for (BasicBlock b : blocks) {
+            if (pc >= b.startPc && pc <= b.endPc) {
+                return b;
+            }
+        }
+        return null;
+    }
 
     /**
      * Identifies junk assignment instructions and replaces them with OP_MOVE A A (NOP).

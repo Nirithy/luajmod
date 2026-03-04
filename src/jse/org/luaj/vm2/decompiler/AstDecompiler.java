@@ -266,21 +266,20 @@ public class AstDecompiler {
             rootBlock = body; // Now append inside the function body
         }
 
-        // Extremely simple linear conversion to AST nodes.
-        // Proper CFG building, basic blocks, graph analysis and loop extraction
-        // require a full compiler backend structure (like LuaDec) which is complex.
-        // We will output the linear pseudo code AST which still uses the actual AST node representation.
+        List<CFGBuilder.BasicBlock> blocks = CFGBuilder.buildCFG(p);
 
-        for (int pc = 0; pc < code.length; pc++) {
-            int i = code[pc];
-            int opcode = Lua.GET_OPCODE(i);
-            int a = Lua.GETARG_A(i);
-            int b = Lua.GETARG_B(i);
-            int c = Lua.GETARG_C(i);
-            int bx = Lua.GETARG_Bx(i);
-            int sbx = Lua.GETARG_sBx(i);
+        for (CFGBuilder.BasicBlock block : blocks) {
+            rootBlock.statements.add(new RawLuaStmt("-- Basic Block " + block.id + " (PC " + block.startPc + " to " + block.endPc + ")"));
+            rootBlock.statements.add(new Label("BLOCK_" + block.id));
 
-            rootBlock.statements.add(new Label("PC_" + pc));
+            for (int pc = block.startPc; pc <= block.endPc; pc++) {
+                int i = code[pc];
+                int opcode = Lua.GET_OPCODE(i);
+                int a = Lua.GETARG_A(i);
+                int b = Lua.GETARG_B(i);
+                int c = Lua.GETARG_C(i);
+                int bx = Lua.GETARG_Bx(i);
+                int sbx = Lua.GETARG_sBx(i);
 
             try {
                 switch (opcode) {
@@ -381,7 +380,8 @@ public class AstDecompiler {
                         rootBlock.statements.add(new Assignment("v" + a, vars[a]));
                         break;
                     case Lua.OP_JMP:
-                        rootBlock.statements.add(new Goto("PC_" + (pc + 1 + sbx)));
+                        int targetBlockJmp = getTargetBlockId(blocks, pc + 1 + sbx);
+                        rootBlock.statements.add(new Goto("BLOCK_" + targetBlockJmp));
                         break;
                     case Lua.OP_EQ:
                     case Lua.OP_LT:
@@ -391,23 +391,36 @@ public class AstDecompiler {
                         String leftCmp = b > 0xff ? getK(k, b & 0xff) : vars[b];
                         String rightCmp = c > 0xff ? getK(k, c & 0xff) : vars[c];
 
+                        int thenTarget = getTargetBlockId(blocks, pc + 2);
+                        int elseTarget = getTargetBlockId(blocks, pc + 1); // skip JMP
                         Block thenBlock = new Block();
-                        thenBlock.statements.add(new RawLuaStmt("-- conditional block (simplified)"));
-                        rootBlock.statements.add(new IfStmt("(" + leftCmp + " " + cmp + " " + rightCmp + ")", thenBlock, null));
+                        thenBlock.statements.add(new Goto("BLOCK_" + thenTarget));
+                        Block elseBlock = new Block();
+                        elseBlock.statements.add(new Goto("BLOCK_" + elseTarget));
+                        rootBlock.statements.add(new IfStmt("(" + leftCmp + " " + cmp + " " + rightCmp + ")", thenBlock, elseBlock));
                         break;
                     case Lua.OP_TEST:
+                        int tTarget = getTargetBlockId(blocks, pc + 2);
+                        int eTarget = getTargetBlockId(blocks, pc + 1);
                         Block testBlock = new Block();
-                        testBlock.statements.add(new RawLuaStmt("-- test block (simplified)"));
-                        if (c == 0) rootBlock.statements.add(new IfStmt("(v" + a + ")", testBlock, null));
-                        else rootBlock.statements.add(new IfStmt("(not v" + a + ")", testBlock, null));
+                        testBlock.statements.add(new Goto("BLOCK_" + tTarget));
+                        Block testElseBlock = new Block();
+                        testElseBlock.statements.add(new Goto("BLOCK_" + eTarget));
+                        if (c == 0) rootBlock.statements.add(new IfStmt("(v" + a + ")", testBlock, testElseBlock));
+                        else rootBlock.statements.add(new IfStmt("(not v" + a + ")", testBlock, testElseBlock));
                         break;
                     case Lua.OP_TESTSET:
+                        int tsetTarget = getTargetBlockId(blocks, pc + 2);
+                        int esetTarget = getTargetBlockId(blocks, pc + 1);
                         Block testsetBlock = new Block();
                         testsetBlock.statements.add(new Assignment("v" + a, "v" + b));
+                        testsetBlock.statements.add(new Goto("BLOCK_" + tsetTarget));
+                        Block testsetElseBlock = new Block();
+                        testsetElseBlock.statements.add(new Goto("BLOCK_" + esetTarget));
                         if (c == 0) {
-                            rootBlock.statements.add(new IfStmt("(v" + b + ")", testsetBlock, null));
+                            rootBlock.statements.add(new IfStmt("(v" + b + ")", testsetBlock, testsetElseBlock));
                         } else {
-                            rootBlock.statements.add(new IfStmt("(not v" + b + ")", testsetBlock, null));
+                            rootBlock.statements.add(new IfStmt("(not v" + b + ")", testsetBlock, testsetElseBlock));
                         }
                         break;
                     case Lua.OP_CALL:
@@ -461,22 +474,25 @@ public class AstDecompiler {
                         }
                         break;
                     case Lua.OP_FORLOOP:
+                        int forloopTarget = getTargetBlockId(blocks, pc + 1 + sbx);
                         rootBlock.statements.add(new RawLuaStmt("v" + a + " = v" + a + " + v" + (a+2)));
                         Block forLoopBody = new Block();
-                        forLoopBody.statements.add(new Goto("PC_" + (pc + 1 + sbx)));
+                        forLoopBody.statements.add(new Goto("BLOCK_" + forloopTarget));
                         rootBlock.statements.add(new IfStmt("v" + a + " <= v" + (a+1), forLoopBody, null));
                         break;
                     case Lua.OP_FORPREP:
+                        int forprepTarget = getTargetBlockId(blocks, pc + 1 + sbx);
                         rootBlock.statements.add(new RawLuaStmt("v" + a + " = v" + a + " - v" + (a+2)));
-                        rootBlock.statements.add(new Goto("PC_" + (pc + 1 + sbx)));
+                        rootBlock.statements.add(new Goto("BLOCK_" + forprepTarget));
                         break;
                     case Lua.OP_TFORCALL:
                         rootBlock.statements.add(new RawLuaStmt("v" + (a+3) + ", dummy = v" + a + "(v" + (a+1) + ", v" + (a+2) + ")"));
                         break;
                     case Lua.OP_TFORLOOP:
+                        int tforTarget = getTargetBlockId(blocks, pc + 1 + sbx);
                         Block tforBlock = new Block();
                         tforBlock.statements.add(new Assignment("v" + a, "v" + (a+1)));
-                        tforBlock.statements.add(new Goto("PC_" + (pc + 1 + sbx)));
+                        tforBlock.statements.add(new Goto("BLOCK_" + tforTarget));
                         rootBlock.statements.add(new IfStmt("v" + (a+1) + " ~= nil", tforBlock, null));
                         break;
                     case Lua.OP_SETLIST:
@@ -497,6 +513,7 @@ public class AstDecompiler {
             } catch (Exception e) {
                 rootBlock.statements.add(new RawLuaStmt("-- error decompiling: " + e.getMessage()));
             }
+            }
         }
 
         // Recursively generate child prototypes
@@ -505,6 +522,15 @@ public class AstDecompiler {
                 parsePrototypeRecursive(p.p[i], rootBlock, "closure_" + i);
             }
         }
+    }
+
+    private static int getTargetBlockId(List<CFGBuilder.BasicBlock> blocks, int pc) {
+        for (CFGBuilder.BasicBlock b : blocks) {
+            if (pc >= b.startPc && pc <= b.endPc) {
+                return b.id;
+            }
+        }
+        return -1;
     }
 
     private static String formatConstant(LuaValue v) {

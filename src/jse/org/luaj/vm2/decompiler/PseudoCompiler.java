@@ -1,5 +1,7 @@
 package org.luaj.vm2.decompiler;
 
+import java.util.List;
+
 import org.luaj.vm2.Lua;
 import org.luaj.vm2.LuaValue;
 import org.luaj.vm2.Prototype;
@@ -8,6 +10,8 @@ public class PseudoCompiler {
 
     public static String decompile(Prototype p) {
         if (p == null || p.code == null) return "-- No instructions";
+
+        List<CFGBuilder.BasicBlock> blocks = CFGBuilder.buildCFG(p);
 
         StringBuilder sb = new StringBuilder();
         int[] code = p.code;
@@ -18,16 +22,26 @@ public class PseudoCompiler {
             vars[i] = "v" + i;
         }
 
-        for (int pc = 0; pc < code.length; pc++) {
-            int i = code[pc];
-            int opcode = Lua.GET_OPCODE(i);
-            int a = Lua.GETARG_A(i);
-            int b = Lua.GETARG_B(i);
-            int c = Lua.GETARG_C(i);
-            int bx = Lua.GETARG_Bx(i);
-            int sbx = Lua.GETARG_sBx(i);
+        for (CFGBuilder.BasicBlock block : blocks) {
+            sb.append("\n  -- [Basic Block ").append(block.id).append("] PCs: ").append(block.startPc).append("-").append(block.endPc).append("\n");
 
-            sb.append("  ");
+            if (!block.inEdges.isEmpty()) {
+                sb.append("  -- In from: ");
+                for (CFGBuilder.BasicBlock in : block.inEdges) sb.append(in.id).append(" ");
+                sb.append("\n");
+            }
+            sb.append("  ::LABEL_").append(block.id).append("::\n");
+
+            for (int pc = block.startPc; pc <= block.endPc; pc++) {
+                int i = code[pc];
+                int opcode = Lua.GET_OPCODE(i);
+                int a = Lua.GETARG_A(i);
+                int b = Lua.GETARG_B(i);
+                int c = Lua.GETARG_C(i);
+                int bx = Lua.GETARG_Bx(i);
+                int sbx = Lua.GETARG_sBx(i);
+
+                sb.append("  ");
             try {
                 switch (opcode) {
                     case Lua.OP_MOVE:
@@ -224,6 +238,13 @@ public class PseudoCompiler {
                 sb.append(" -- error decompiling: ").append(e.getMessage());
             }
             sb.append("\n");
+            }
+
+            if (!block.outEdges.isEmpty()) {
+                sb.append("  -- Out to: ");
+                for (CFGBuilder.BasicBlock out : block.outEdges) sb.append(out.id).append(" ");
+                sb.append("\n");
+            }
         }
 
         return sb.toString();
