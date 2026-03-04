@@ -105,7 +105,8 @@ public class DummyLuaValue extends LuaValue {
     // Always return a DummyLuaValue to prevent errors chaining
     @Override
     public LuaValue get(LuaValue key) {
-        return new DummyLuaValue(name + "." + key.tojstring());
+        String keyStr = key != null ? key.tojstring() : "null";
+        return new DummyLuaValue(name + "." + keyStr);
     }
 
     @Override
@@ -116,6 +117,21 @@ public class DummyLuaValue extends LuaValue {
     @Override
     public LuaValue get(String key) {
         return new DummyLuaValue(name + "." + key);
+    }
+
+    @Override
+    public LuaValue rawget(LuaValue key) {
+        return get(key);
+    }
+
+    @Override
+    public LuaValue rawget(int key) {
+        return get(key);
+    }
+
+    @Override
+    public LuaValue rawget(String key) {
+        return get(key);
     }
 
     @Override
@@ -130,6 +146,21 @@ public class DummyLuaValue extends LuaValue {
 
     @Override
     public void set(String key, LuaValue value) {
+        // Do nothing, tolerant
+    }
+
+    @Override
+    public void rawset(LuaValue key, LuaValue value) {
+        // Do nothing, tolerant
+    }
+
+    @Override
+    public void rawset(int key, LuaValue value) {
+        // Do nothing, tolerant
+    }
+
+    @Override
+    public void rawset(String key, LuaValue value) {
         // Do nothing, tolerant
     }
 
