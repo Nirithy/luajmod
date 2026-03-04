@@ -345,21 +345,50 @@ public class Lua {
 		 (0<<7) | (1<<6) | (OpArgU<<4) | (OpArgN<<2) | (iABx),		/* OP_CLOSURE */
 		 (0<<7) | (1<<6) | (OpArgU<<4) | (OpArgN<<2) | (iABC),		/* OP_VARARG */
 		 (0<<7) | (0<<6) | (OpArgU<<4) | (OpArgU<<2) | (iAx),		/* OP_EXTRAARG */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_IDIV */
+		 (0<<7) | (1<<6) | (OpArgR<<4) | (OpArgN<<2) | (iABC),		/* OP_BNOT */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_BAND */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_BOR */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_BXOR */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_SHL */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_SHR */
+		 (0<<7) | (1<<6) | (OpArgR<<4) | (OpArgK<<2) | (iABC),		/* OP_GETFIELDU */
+		 (0<<7) | (1<<6) | (OpArgR<<4) | (OpArgK<<2) | (iABC),		/* OP_GETFIELDT */
+		 (0<<7) | (0<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_SETFIELDU */
+		 (0<<7) | (0<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_SETFIELDT */
+		 (0<<7) | (1<<6) | (OpArgU<<4) | (OpArgU<<2) | (iABC),		/* OP_NEWTABLE0 */
+		 (0<<7) | (1<<6) | (OpArgR<<4) | (OpArgK<<2) | (iABC),		/* OP_SELF0 */
+		 (0<<7) | (1<<6) | (OpArgR<<4) | (OpArgK<<2) | (iABC),		/* OP_ADDI */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_ADDK */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_SUBK */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_MULK */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_MODK */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_POWK */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_DIVK */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_IDIVK */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_BANDK */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_BORK */
+		 (0<<7) | (1<<6) | (OpArgK<<4) | (OpArgK<<2) | (iABC),		/* OP_BXORK */
 	  };
 
 	public static int getOpMode(int m) {
+		if (m >= luaP_opmodes.length) return 0;
 		return luaP_opmodes[m] & 3;
 	}
 	public static int getBMode(int m) {
+		if (m >= luaP_opmodes.length) return 0;
 		return (luaP_opmodes[m] >> 4) & 3;
 	}
 	public static int getCMode(int m) {
+		if (m >= luaP_opmodes.length) return 0;
 		return (luaP_opmodes[m] >> 2) & 3;
 	}
 	public static boolean testAMode(int m) {
+		if (m >= luaP_opmodes.length) return false;
 		return 0 != (luaP_opmodes[m] & (1 << 6));
 	}
 	public static boolean testTMode(int m) {
+		if (m >= luaP_opmodes.length) return false;
 		return 0 != (luaP_opmodes[m] & (1 << 7));
 	}
 
