@@ -1074,7 +1074,10 @@ public class LuaValue extends Varargs {
 	 * @param expected String naming the type that was expected
 	 * @throws LuaError in all cases
 	 */
-	protected LuaValue argerror(String expected) { throw new LuaError("bad argument: "+expected+" expected, got "+typename()); }
+	protected LuaValue argerror(String expected) {
+		if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArgError_" + expected);
+		throw new LuaError("bad argument: "+expected+" expected, got "+typename());
+	}
 	
 	/**
 	 * Throw a {@link LuaError} indicating an invalid argument was supplied to a function
@@ -1082,14 +1085,20 @@ public class LuaValue extends Varargs {
 	 * @param msg String providing information about the invalid argument
 	 * @throws LuaError in all cases
 	 */
-	public static LuaValue argerror(int iarg,String msg) { throw new LuaError("bad argument #"+iarg+": "+msg); }
+	public static LuaValue argerror(int iarg,String msg) {
+		if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArgError");
+		throw new LuaError("bad argument #"+iarg+": "+msg);
+	}
 	
 	/**
 	 * Throw a {@link LuaError} indicating an invalid type was supplied to a function
 	 * @param expected String naming the type that was expected
 	 * @throws LuaError in all cases
 	 */
-	protected LuaValue typerror(String expected) { throw new LuaError(expected+" expected, got "+typename()); }
+	protected LuaValue typerror(String expected) {
+		if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("TypeError_" + expected);
+		throw new LuaError(expected+" expected, got "+typename());
+	}
 	
 	/**
 	 * Throw a {@link LuaError} indicating an operation is not implemented
@@ -1116,7 +1125,10 @@ public class LuaValue extends Varargs {
 	 * typically due to an invalid operand type
 	 * @throws LuaError in all cases
 	 */
-	protected LuaValue aritherror() { throw new LuaError("attempt to perform arithmetic on "+typename()); }
+	protected LuaValue aritherror() {
+		if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithError");
+		throw new LuaError("attempt to perform arithmetic on "+typename());
+	}
 	
 	/**
 	 * Throw a {@link LuaError} based on an arithmetic error such as add, or pow,
@@ -1124,7 +1136,10 @@ public class LuaValue extends Varargs {
 	 * @param fun String description of the function that was attempted
 	 * @throws LuaError in all cases
 	 */
-	protected LuaValue aritherror(String fun) { throw new LuaError("attempt to perform arithmetic '"+fun+"' on "+typename()); }
+	protected LuaValue aritherror(String fun) {
+		if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithError");
+		throw new LuaError("attempt to perform arithmetic '"+fun+"' on "+typename());
+	}
 	
 	/**
 	 * Throw a {@link LuaError} based on a comparison error such as greater-than or less-than,
@@ -2534,12 +2549,12 @@ public class LuaValue extends Varargs {
 	/** Integer division: Perform integer division with another value
 	 * of double type without metatag processing
 	 */
-	public LuaValue   idiv( double rhs )        { return aritherror("idiv"); }
+	public LuaValue   idiv( double rhs )        { if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithResult"); return aritherror("idiv"); }
 	
 	/** Integer division: Perform integer division with another value
 	 * of int type without metatag processing
 	 */
-	public LuaValue   idiv( int rhs )        { return aritherror("idiv"); }
+	public LuaValue   idiv( int rhs )        { if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithResult"); return aritherror("idiv"); }
 	
 	/** Reverse-integer-division: Perform integer division from another value
 	 * with metatag processing
@@ -2558,12 +2573,12 @@ public class LuaValue extends Varargs {
 	/** Bitwise AND: Perform bitwise AND with another value
 	 * of double type without metatag processing
 	 */
-	public LuaValue   band( double rhs )        { return aritherror("band"); }
+	public LuaValue   band( double rhs )        { if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithResult"); return aritherror("band"); }
 	
 	/** Bitwise AND: Perform bitwise AND with another value
 	 * of int type without metatag processing
 	 */
-	public LuaValue   band( int rhs )        { return aritherror("band"); }
+	public LuaValue   band( int rhs )        { if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithResult"); return aritherror("band"); }
 	
 	/** Bitwise OR: Perform bitwise OR with another value
 	 * with metatag processing
@@ -2573,12 +2588,12 @@ public class LuaValue extends Varargs {
 	/** Bitwise OR: Perform bitwise OR with another value
 	 * of double type without metatag processing
 	 */
-	public LuaValue   bor( double rhs )        { return aritherror("bor"); }
+	public LuaValue   bor( double rhs )        { if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithResult"); return aritherror("bor"); }
 	
 	/** Bitwise OR: Perform bitwise OR with another value
 	 * of int type without metatag processing
 	 */
-	public LuaValue   bor( int rhs )        { return aritherror("bor"); }
+	public LuaValue   bor( int rhs )        { if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithResult"); return aritherror("bor"); }
 	
 	/** Bitwise XOR: Perform bitwise XOR with another value
 	 * with metatag processing
@@ -2588,12 +2603,12 @@ public class LuaValue extends Varargs {
 	/** Bitwise XOR: Perform bitwise XOR with another value
 	 * of double type without metatag processing
 	 */
-	public LuaValue   bxor( double rhs )        { return aritherror("bxor"); }
+	public LuaValue   bxor( double rhs )        { if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithResult"); return aritherror("bxor"); }
 	
 	/** Bitwise XOR: Perform bitwise XOR with another value
 	 * of int type without metatag processing
 	 */
-	public LuaValue   bxor( int rhs )        { return aritherror("bxor"); }
+	public LuaValue   bxor( int rhs )        { if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithResult"); return aritherror("bxor"); }
 	
 	/** Shift left: Perform left shift with another value
 	 * with metatag processing
@@ -2603,12 +2618,12 @@ public class LuaValue extends Varargs {
 	/** Shift left: Perform left shift with another value
 	 * of double type without metatag processing
 	 */
-	public LuaValue   shl( double rhs )        { return aritherror("shl"); }
+	public LuaValue   shl( double rhs )        { if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithResult"); return aritherror("shl"); }
 	
 	/** Shift left: Perform left shift with another value
 	 * of int type without metatag processing
 	 */
-	public LuaValue   shl( int rhs )        { return aritherror("shl"); }
+	public LuaValue   shl( int rhs )        { if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithResult"); return aritherror("shl"); }
 	
 	/** Shift right: Perform right shift with another value
 	 * with metatag processing
@@ -2618,12 +2633,12 @@ public class LuaValue extends Varargs {
 	/** Shift right: Perform right shift with another value
 	 * of double type without metatag processing
 	 */
-	public LuaValue   shr( double rhs )        { return aritherror("shr"); }
+	public LuaValue   shr( double rhs )        { if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithResult"); return aritherror("shr"); }
 	
 	/** Shift right: Perform right shift with another value
 	 * of int type without metatag processing
 	 */
-	public LuaValue   shr( int rhs )        { return aritherror("shr"); }
+	public LuaValue   shr( int rhs )        { if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithResult"); return aritherror("shr"); }
 	
 	/** Perform metatag processing for arithmetic operations.
 	 * <p>
@@ -2650,8 +2665,10 @@ public class LuaValue extends Varargs {
 		LuaValue h = this.metatag(tag);
 		if ( h.isnil() ) {
 			h = op2.metatag(tag);
-			if ( h.isnil() )
+			if ( h.isnil() ) {
+				if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithResult");
 				error( "attempt to perform arithmetic "+tag+" on "+typename()+" and "+op2.typename() );
+			}
 		}
 		return h.call( this, op2 );
 	}
@@ -2679,8 +2696,10 @@ public class LuaValue extends Varargs {
 	 */
 	protected LuaValue arithmtwith(LuaValue tag, double op1) {
 		LuaValue h = metatag(tag);
-		if ( h.isnil() )
+		if ( h.isnil() ) {
+			if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("ArithResult");
 			error( "attempt to perform arithmetic "+tag+" on number and "+typename() );
+		}
 		return h.call( LuaValue.valueOf(op1), this );
 	}
 	
@@ -3396,6 +3415,8 @@ public class LuaValue extends Varargs {
 	 */
 	public static LuaUserdata userdataOf(Object o,LuaValue metatable) { return new LuaUserdata(o,metatable); }
 
+	public static boolean s_tolerantMode = false;
+
 	/** Constant limiting metatag loop processing */
 	private static final int      MAXTAGLOOP = 100;
 	
@@ -3415,13 +3436,16 @@ public class LuaValue extends Varargs {
 				LuaValue res = t.rawget(key);
 				if ((!res.isnil()) || (tm = t.metatag(INDEX)).isnil())
 					return res;
-			} else if ((tm = t.metatag(INDEX)).isnil())
+			} else if ((tm = t.metatag(INDEX)).isnil()) {
+				if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue(t.typename() + "." + key.tojstring());
 				t.indexerror(key.tojstring());
+			}
 			if (tm.isfunction())
 				return tm.call(t, key);
 			t = tm;
 		}
 		while ( ++loop < MAXTAGLOOP );
+		if (s_tolerantMode) return new org.luaj.vm2.decompiler.DummyLuaValue("loop_in_gettable");
 		error("loop in gettable");
 		return NIL;
 	}
@@ -3443,8 +3467,10 @@ public class LuaValue extends Varargs {
 					t.rawset(key, value);
 					return true;
 				}
-			} else if ((tm = t.metatag(NEWINDEX)).isnil())
+			} else if ((tm = t.metatag(NEWINDEX)).isnil()) {
+				if (s_tolerantMode) return true;
 				throw new LuaError("table expected for set index ('" + key + "') value, got " + t.typename());
+			}
 			if (tm.isfunction()) {
 				tm.call(t, key, value);
 				return true;
@@ -3452,6 +3478,7 @@ public class LuaValue extends Varargs {
 			t = tm;
 		}
 		while ( ++loop < MAXTAGLOOP );
+		if (s_tolerantMode) return true;
 		error("loop in settable");
 		return false;
 	}
@@ -3480,6 +3507,9 @@ public class LuaValue extends Varargs {
 	protected LuaValue checkmetatag(LuaValue tag, String reason) {
 		LuaValue h = this.metatag(tag);
 		if ( h.isnil() ) {
+			if (s_tolerantMode) {
+				return new org.luaj.vm2.decompiler.DummyLuaValue("MissingMetatag_" + tag.tojstring());
+			}
 			String valueInfo = this.tojstring();
 			if (valueInfo.length() > 100) {
 				valueInfo = valueInfo.substring(0, 100) + "...";

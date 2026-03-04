@@ -144,6 +144,17 @@ public class DummyLuaValue extends LuaValue {
     }
 
     @Override
+    public LuaValue arg(int n) {
+        if (n == 1) return this;
+        return new DummyLuaValue(name + "_ret" + n);
+    }
+
+    @Override
+    public LuaValue arg1() {
+        return this;
+    }
+
+    @Override
     public LuaValue method(String name) {
         return new DummyLuaValue(this.name + ":" + name + "()");
     }
