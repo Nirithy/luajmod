@@ -77,6 +77,21 @@ public class DummyLuaValue extends LuaValue {
     public LuaValue concatTo(LuaValue lhs) { return new DummyLuaValue("(" + lhs.tojstring() + " .. " + name + ")"); }
 
     @Override
+    public LuaValue idiv(LuaValue rhs) { return new DummyLuaValue("(" + name + " // " + rhs.tojstring() + ")"); }
+    @Override
+    public LuaValue band(LuaValue rhs) { return new DummyLuaValue("(" + name + " & " + rhs.tojstring() + ")"); }
+    @Override
+    public LuaValue bor(LuaValue rhs) { return new DummyLuaValue("(" + name + " | " + rhs.tojstring() + ")"); }
+    @Override
+    public LuaValue bxor(LuaValue rhs) { return new DummyLuaValue("(" + name + " ~ " + rhs.tojstring() + ")"); }
+    @Override
+    public LuaValue shl(LuaValue rhs) { return new DummyLuaValue("(" + name + " << " + rhs.tojstring() + ")"); }
+    @Override
+    public LuaValue shr(LuaValue rhs) { return new DummyLuaValue("(" + name + " >> " + rhs.tojstring() + ")"); }
+    @Override
+    public LuaValue bnot() { return new DummyLuaValue("(~" + name + ")"); }
+
+    @Override
     public boolean eq_b(LuaValue val) { return false; }
     @Override
     public LuaValue eq(LuaValue val) { return LuaValue.FALSE; }

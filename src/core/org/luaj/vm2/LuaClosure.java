@@ -202,13 +202,13 @@ public class LuaClosure extends LuaFunction {
 		}
 
 		// process instructions
-		boolean tolerantMode = false;
+		boolean tolerantMode = true; // FORCE TOLERANT MODE
 		if (globals != null && globals.get("TOLERANT_MODE").toboolean()) {
 			tolerantMode = true;
 		}
 
 		try {
-			for (; true; ++pc) {
+			for (; pc < code.length; ++pc) {
 				try {
 					if (globals != null && globals.debuglib != null)
 						globals.debuglib.onInstruction( pc, v, top );
@@ -688,6 +688,7 @@ public class LuaClosure extends LuaFunction {
 			if (globals != null && globals.debuglib != null)
 				globals.debuglib.onReturn();
 		}
+		return NONE;
 	}
 
 	/**

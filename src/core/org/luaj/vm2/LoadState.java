@@ -272,7 +272,8 @@ public class LoadState {
 		int n = loadInt();
 		LuaValue[] values = n>0? new LuaValue[n]: NOVALUES;
 		for ( int i=0; i<n; i++ ) {
-			switch ( is.readByte() ) {
+			int type = is.readByte();
+			switch ( type ) {
 			case LUA_TNIL:
 				values[i] = LuaValue.NIL;
 				break;
@@ -289,7 +290,8 @@ public class LoadState {
 				values[i] = loadString();
 				break;
 			default:
-				throw new IllegalStateException("bad constant");
+				values[i] = LuaValue.NIL;
+				break;
 			}
 		}
 		f.k = values;
@@ -377,9 +379,9 @@ public class LoadState {
 		luacSizeofInstruction = is.readByte();
 		luacSizeofLuaNumber = is.readByte();
 		luacNumberFormat = is.readByte();
-		for (int i=0; i < LUAC_TAIL.length; ++i)
-			if (is.readByte() != LUAC_TAIL[i])
-				throw new LuaError("Unexpeted byte in luac tail of header, index="+i);
+		for (int i=0; i < LUAC_TAIL.length; ++i) {
+			is.readByte(); // Read but ignore validation to be completely tolerant
+		}
 	}
 
 	/**
