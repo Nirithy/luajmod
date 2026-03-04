@@ -309,13 +309,13 @@ public class AstDecompiler {
                         if (b == 0) {
                             vars[a] = keyStr; // Global access
                         } else {
-                            vars[a] = "upvalue_" + b + "[" + keyStr + "]";
+                            vars[a] = keyStr.startsWith("\"") ? "upvalue_" + b + "." + keyStr.replace("\"", "") : "upvalue_" + b + "[" + keyStr + "]";
                         }
                         rootBlock.statements.add(new Assignment("v" + a, vars[a]));
                         break;
                     case Lua.OP_GETTABLE:
                         String keyStr2 = c > 0xff ? getK(k, c & 0xff) : vars[c];
-                        vars[a] = vars[b] + "[" + keyStr2 + "]";
+                        vars[a] = keyStr2.startsWith("\"") ? vars[b] + "." + keyStr2.replace("\"", "") : vars[b] + "[" + keyStr2 + "]";
                         rootBlock.statements.add(new Assignment("v" + a, vars[a]));
                         break;
                     case Lua.OP_SETTABUP:
@@ -324,7 +324,8 @@ public class AstDecompiler {
                         if (a == 0) {
                             rootBlock.statements.add(new Assignment(keyStr3, valStr));
                         } else {
-                            rootBlock.statements.add(new Assignment("upvalue_" + a + "[" + keyStr3 + "]", valStr));
+                            String target = keyStr3.startsWith("\"") ? "upvalue_" + a + "." + keyStr3.replace("\"", "") : "upvalue_" + a + "[" + keyStr3 + "]";
+                            rootBlock.statements.add(new Assignment(target, valStr));
                         }
                         break;
                     case Lua.OP_SETUPVAL:
@@ -333,7 +334,8 @@ public class AstDecompiler {
                     case Lua.OP_SETTABLE:
                         String keyStr4 = b > 0xff ? getK(k, b & 0xff) : vars[b];
                         String valStr2 = c > 0xff ? getK(k, c & 0xff) : vars[c];
-                        rootBlock.statements.add(new Assignment("v" + a + "[" + keyStr4 + "]", valStr2));
+                        String target2 = keyStr4.startsWith("\"") ? "v" + a + "." + keyStr4.replace("\"", "") : "v" + a + "[" + keyStr4 + "]";
+                        rootBlock.statements.add(new Assignment(target2, valStr2));
                         break;
                     case Lua.OP_NEWTABLE:
                         vars[a] = "{}";
@@ -426,37 +428,44 @@ public class AstDecompiler {
                     case Lua.OP_CALL:
                         List<String> callArgs = new ArrayList<>();
                         if (b == 0) {
-                            callArgs.add("table.unpack(v" + (a + 1) + "_varargs)");
+                            callArgs.add("table.unpack(v" + (a + 1) + ")");
                         } else {
                             for (int j = 1; j < b; j++) {
-                                callArgs.add(vars[a + j]);
+                                String argVal = vars[a + j];
+                                callArgs.add(argVal != null ? argVal : "v" + (a + j));
                             }
                         }
 
+                        String funcName = vars[a];
+                        if (funcName == null) funcName = "v" + a;
+
                         if (c == 0) {
-                            rootBlock.statements.add(new Call(vars[a], callArgs, "v" + a + "_varargs"));
+                            rootBlock.statements.add(new Call(funcName, callArgs, "v" + a + "_varargs"));
                         } else if (c == 1) {
-                            rootBlock.statements.add(new Call(vars[a], callArgs, ""));
+                            rootBlock.statements.add(new Call(funcName, callArgs, ""));
                         } else {
                             StringBuilder rets = new StringBuilder();
                             for (int j = 0; j < c - 1; j++) {
                                 if (j > 0) rets.append(", ");
                                 rets.append("v" + (a + j));
-                                vars[a + j] = "ret_" + j + "_of_" + vars[a];
+                                vars[a + j] = "ret_" + j + "_of_" + funcName.replaceAll("[^a-zA-Z0-9_]", "_");
                             }
-                            rootBlock.statements.add(new Call(vars[a], callArgs, rets.toString()));
+                            rootBlock.statements.add(new Call(funcName, callArgs, rets.toString()));
                         }
                         break;
                     case Lua.OP_TAILCALL:
                         List<String> tailArgs = new ArrayList<>();
                         if (b == 0) {
-                            tailArgs.add("table.unpack(v" + (a + 1) + "_varargs)");
+                            tailArgs.add("table.unpack(v" + (a + 1) + ")");
                         } else {
                             for (int j = 1; j < b; j++) {
-                                tailArgs.add(vars[a + j]);
+                                String argVal = vars[a + j];
+                                tailArgs.add(argVal != null ? argVal : "v" + (a + j));
                             }
                         }
-                        Call tailCall = new Call(vars[a], tailArgs, "");
+                        String tailFuncName = vars[a];
+                        if (tailFuncName == null) tailFuncName = "v" + a;
+                        Call tailCall = new Call(tailFuncName, tailArgs, "");
                         rootBlock.statements.add(new RawLuaStmt("return " + tailCall.format(0).trim()));
                         break;
                     case Lua.OP_RETURN:
@@ -475,15 +484,13 @@ public class AstDecompiler {
                         break;
                     case Lua.OP_FORLOOP:
                         int forloopTarget = getTargetBlockId(blocks, pc + 1 + sbx);
-                        rootBlock.statements.add(new RawLuaStmt("v" + a + " = v" + a + " + v" + (a+2)));
                         Block forLoopBody = new Block();
-                        forLoopBody.statements.add(new Goto("BLOCK_" + forloopTarget));
-                        rootBlock.statements.add(new IfStmt("v" + a + " <= v" + (a+1), forLoopBody, null));
+                        forLoopBody.statements.add(new RawLuaStmt("-- loop body (jump to BLOCK_" + forloopTarget + ")"));
+                        rootBlock.statements.add(new ForStmt("v" + a, "v" + a + "_start", "v" + (a+1), "v" + (a+2), forLoopBody));
                         break;
                     case Lua.OP_FORPREP:
                         int forprepTarget = getTargetBlockId(blocks, pc + 1 + sbx);
-                        rootBlock.statements.add(new RawLuaStmt("v" + a + " = v" + a + " - v" + (a+2)));
-                        rootBlock.statements.add(new Goto("BLOCK_" + forprepTarget));
+                        rootBlock.statements.add(new RawLuaStmt("-- for loop prepare (jumps to BLOCK_" + forprepTarget + ")"));
                         break;
                     case Lua.OP_TFORCALL:
                         rootBlock.statements.add(new RawLuaStmt("v" + (a+3) + ", dummy = v" + a + "(v" + (a+1) + ", v" + (a+2) + ")"));
@@ -492,8 +499,8 @@ public class AstDecompiler {
                         int tforTarget = getTargetBlockId(blocks, pc + 1 + sbx);
                         Block tforBlock = new Block();
                         tforBlock.statements.add(new Assignment("v" + a, "v" + (a+1)));
-                        tforBlock.statements.add(new Goto("BLOCK_" + tforTarget));
-                        rootBlock.statements.add(new IfStmt("v" + (a+1) + " ~= nil", tforBlock, null));
+                        tforBlock.statements.add(new RawLuaStmt("-- tfor loop body (jump to BLOCK_" + tforTarget + ")"));
+                        rootBlock.statements.add(new WhileStmt("v" + (a+1) + " ~= nil", tforBlock));
                         break;
                     case Lua.OP_SETLIST:
                         rootBlock.statements.add(new RawLuaStmt("-- SETLIST omitted for runnable pseudo code"));
