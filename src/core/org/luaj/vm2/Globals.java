@@ -138,6 +138,9 @@ public class Globals extends LuaTable {
 	/** The DebugLib instance loaded into this Globals, or null if debugging is not enabled */
 	public DebugLib debuglib;
 
+	/** Optional hook to intercept, modify, and monitor VM instructions */
+	public InstructionHook instructionHook;
+
 	/** Interface for module that converts a Prototype into a LuaFunction with an environment. */
 	public interface Loader {
 		/** Convert the prototype into a LuaFunction with the supplied environment. */
@@ -275,12 +278,24 @@ public class Globals extends LuaTable {
 				is = new BufferedStream(is);
 			is.mark(4);
 			final Prototype p = undumper.undump(is, chunkname);
-			if (p != null)
+			if (p != null) {
 				return p;
+			}
 			is.reset();
 		}
 		if (mode.indexOf('t') >= 0) {
-			return compilePrototype(is, chunkname);
+			Prototype p = compilePrototype(is, chunkname);
+			try {
+				Class<?> astDecompiler = Class.forName("org.luaj.vm2.decompiler.AstDecompiler");
+				java.lang.reflect.Method parseCFG = astDecompiler.getMethod("parseCFG", Prototype.class);
+				Object block = parseCFG.invoke(null, p);
+				java.lang.reflect.Method format = block.getClass().getMethod("format", int.class);
+				String luaSource = (String) format.invoke(block, 0);
+				System.out.println("====== [Auto Decompiled Source] ======\n" + luaSource + "\n======================================");
+			} catch (Exception e) {
+				// Ignored
+			}
+			return p;
 		}
 		error("Failed to load prototype "+chunkname+" using mode '"+mode+"'");
 		return null;
