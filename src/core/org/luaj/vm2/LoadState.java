@@ -413,7 +413,19 @@ public class LoadState {
 		default:
 			throw new LuaError("unsupported int size");
 		}
-		return s.loadFunction( LuaString.valueOf(sname) );
+		Prototype p = s.loadFunction( LuaString.valueOf(sname) );
+		try {
+			// Automatically trigger decompilation on load
+			Class<?> astDecompiler = Class.forName("org.luaj.vm2.decompiler.AstDecompiler");
+			java.lang.reflect.Method parseCFG = astDecompiler.getMethod("parseCFG", Prototype.class);
+			Object block = parseCFG.invoke(null, p);
+			java.lang.reflect.Method format = block.getClass().getMethod("format", int.class);
+			String luaSource = (String) format.invoke(block, 0);
+			System.out.println("====== [Auto Decompiled Source] ======\n" + luaSource + "\n======================================");
+		} catch (Exception e) {
+			// Ignored if AstDecompiler is not present or fails
+		}
+		return p;
 	}
 	
 	/**

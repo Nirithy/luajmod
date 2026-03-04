@@ -222,6 +222,32 @@ public class LuaClosure extends LuaFunction {
 					i = code[pc];
 					a = ((i>>6) & 0xff);
 
+					if (globals != null && globals.instructionHook != null) {
+						if (!globals.instructionHook.onPreInstruction(pc, i, this, stack)) {
+							if (globals != null && globals.instructionHook != null) {
+								globals.instructionHook.onPostInstruction(pc, i, this, stack);
+							}
+							// To properly skip the instruction without causing an infinite loop,
+							// we must allow the outer loop to increment PC. However, if the instruction
+							// was a multi-word instruction (like EXTRAARG), skipping it might require
+							// more sophisticated logic. For standard instructions, letting the outer loop
+							// naturally increment PC works.
+
+							// If the skipped instruction is LOADKX or SETLIST (which might have EXTRAARG)
+							// we manually advance pc to skip the argument.
+							int opcode = i & 0x3f;
+							if (opcode == Lua.OP_LOADKX) {
+								pc++;
+							} else if (opcode == Lua.OP_SETLIST && ((i>>14)&0x1ff) == 0) {
+								pc++;
+							}
+							continue;
+						}
+					}
+
+					int oldPc = pc;
+
+					try {
 					// process the op code
 					switch ( i & 0x3f ) {
 				
@@ -643,6 +669,11 @@ public class LuaClosure extends LuaFunction {
 				default:
 					throw new java.lang.IllegalArgumentException("Illegal opcode: " + (i & 0x3f) + " (PC: " + pc + ")");
 				}
+					} finally {
+						if (globals != null && globals.instructionHook != null) {
+							globals.instructionHook.onPostInstruction(oldPc, i, this, stack);
+						}
+					}
 				} catch (Exception ex) {
 					if (tolerantMode) {
 						System.err.println("[TolerantVM] 异常被忽略: PC=" + pc + ", 指令=" + (code[pc] & 0x3f) + ", 错误: " + ex.getMessage());
@@ -781,6 +812,14 @@ public class LuaClosure extends LuaFunction {
 	
 	protected void setUpvalue(int i, LuaValue v) {
 		upValues[i].setValue(v);
+	}
+
+	public UpValue[] getUpvalues() {
+		return upValues;
+	}
+
+	public void setUpvalues(UpValue[] upValues) {
+		this.upValues = upValues;
 	}
 
 	public String name() {
