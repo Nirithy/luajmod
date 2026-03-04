@@ -202,22 +202,28 @@ public class LuaClosure extends LuaFunction {
 		}
 
 		// process instructions
+		boolean tolerantMode = false;
+		if (globals != null && globals.get("TOLERANT_MODE").toboolean()) {
+			tolerantMode = true;
+		}
+
 		try {
 			for (; true; ++pc) {
-				if (globals != null && globals.debuglib != null)
-					globals.debuglib.onInstruction( pc, v, top );
-				
-				// 调试器行检查
-				if (debugger.isEnabled() && p.lineinfo != null && pc < p.lineinfo.length) {
-					debugger.onLineChange(this, p.lineinfo[pc]);
-				}
-				
-				// pull out instruction
-				i = code[pc];
-				a = ((i>>6) & 0xff);
-				
-				// process the op code
-				switch ( i & 0x3f ) {
+				try {
+					if (globals != null && globals.debuglib != null)
+						globals.debuglib.onInstruction( pc, v, top );
+
+					// 调试器行检查
+					if (debugger.isEnabled() && p.lineinfo != null && pc < p.lineinfo.length) {
+						debugger.onLineChange(this, p.lineinfo[pc]);
+					}
+
+					// pull out instruction
+					i = code[pc];
+					a = ((i>>6) & 0xff);
+
+					// process the op code
+					switch ( i & 0x3f ) {
 				
 				case Lua.OP_MOVE:/*	A B	R(A):= R(B)					*/
 					stack[a] = stack[i>>>23];
@@ -636,6 +642,25 @@ public class LuaClosure extends LuaFunction {
 
 				default:
 					throw new java.lang.IllegalArgumentException("Illegal opcode: " + (i & 0x3f) + " (PC: " + pc + ")");
+				}
+				} catch (Exception ex) {
+					if (tolerantMode) {
+						System.err.println("[TolerantVM] 异常被忽略: PC=" + pc + ", 指令=" + (code[pc] & 0x3f) + ", 错误: " + ex.getMessage());
+						// 尝试为目标寄存器设置 Dummy 值以避免级联错误
+						int instr = code[pc];
+						int op = instr & 0x3f;
+						int argA = (instr >> 6) & 0xff;
+						try {
+							if (stack.length > argA) {
+								stack[argA] = new org.luaj.vm2.decompiler.DummyLuaValue("Recovered_" + op);
+							}
+						} catch (Throwable t) {}
+						// 继续执行下一条指令
+					} else {
+						if (ex instanceof LuaError) throw (LuaError) ex;
+						if (ex instanceof RuntimeException) throw (RuntimeException) ex;
+						throw new RuntimeException(ex);
+					}
 				}
 			}
 		} catch ( LuaError le ) {

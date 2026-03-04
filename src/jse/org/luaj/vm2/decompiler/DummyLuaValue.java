@@ -19,8 +19,14 @@ public class DummyLuaValue extends LuaValue {
 
     @Override
     public int type() {
-        return LuaValue.TUSERDATA;
+        return LuaValue.TTABLE; // Return TTABLE to avoid errors in OP_GETTABLE etc if checked
     }
+
+    @Override
+    public boolean istable() { return true; }
+
+    @Override
+    public boolean isfunction() { return true; }
 
     @Override
     public String typename() {
@@ -32,6 +38,55 @@ public class DummyLuaValue extends LuaValue {
         return typename();
     }
 
+    @Override
+    public boolean toboolean() { return true; }
+
+    @Override
+    public LuaValue not() { return LuaValue.FALSE; }
+
+    @Override
+    public int checkint() { return 0; }
+
+    @Override
+    public double checkdouble() { return 0.0; }
+
+    @Override
+    public org.luaj.vm2.LuaString checkstring() { return org.luaj.vm2.LuaString.valueOf(tojstring()); }
+
+    @Override
+    public int length() { return 0; }
+
+    @Override
+    public LuaValue len() { return LuaValue.valueOf(0); }
+
+    @Override
+    public LuaValue add(LuaValue rhs) { return new DummyLuaValue("(" + name + " + " + rhs.tojstring() + ")"); }
+    @Override
+    public LuaValue sub(LuaValue rhs) { return new DummyLuaValue("(" + name + " - " + rhs.tojstring() + ")"); }
+    @Override
+    public LuaValue mul(LuaValue rhs) { return new DummyLuaValue("(" + name + " * " + rhs.tojstring() + ")"); }
+    @Override
+    public LuaValue div(LuaValue rhs) { return new DummyLuaValue("(" + name + " / " + rhs.tojstring() + ")"); }
+    @Override
+    public LuaValue mod(LuaValue rhs) { return new DummyLuaValue("(" + name + " % " + rhs.tojstring() + ")"); }
+    @Override
+    public LuaValue pow(LuaValue rhs) { return new DummyLuaValue("(" + name + " ^ " + rhs.tojstring() + ")"); }
+    @Override
+    public LuaValue concat(LuaValue rhs) { return new DummyLuaValue("(" + name + " .. " + rhs.tojstring() + ")"); }
+    @Override
+    public LuaValue concatTo(LuaValue lhs) { return new DummyLuaValue("(" + lhs.tojstring() + " .. " + name + ")"); }
+
+    @Override
+    public boolean eq_b(LuaValue val) { return false; }
+    @Override
+    public LuaValue eq(LuaValue val) { return LuaValue.FALSE; }
+    @Override
+    public boolean lt_b(LuaValue val) { return false; }
+    @Override
+    public boolean lteq_b(LuaValue val) { return false; }
+    @Override
+    public int strcmp(org.luaj.vm2.LuaString rhs) { return 0; }
+
     // Always return a DummyLuaValue to prevent errors chaining
     @Override
     public LuaValue get(LuaValue key) {
@@ -39,7 +94,27 @@ public class DummyLuaValue extends LuaValue {
     }
 
     @Override
+    public LuaValue get(int key) {
+        return new DummyLuaValue(name + "[" + key + "]");
+    }
+
+    @Override
+    public LuaValue get(String key) {
+        return new DummyLuaValue(name + "." + key);
+    }
+
+    @Override
     public void set(LuaValue key, LuaValue value) {
+        // Do nothing, tolerant
+    }
+
+    @Override
+    public void set(int key, LuaValue value) {
+        // Do nothing, tolerant
+    }
+
+    @Override
+    public void set(String key, LuaValue value) {
         // Do nothing, tolerant
     }
 

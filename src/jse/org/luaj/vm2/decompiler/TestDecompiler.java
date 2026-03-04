@@ -183,9 +183,10 @@ public class TestDecompiler {
             System.out.println("  info <id>         - 显示函数详情");
             System.out.println("  run <id>          - 伪执行指定函数");
             System.out.println("  runall            - 伪执行所有函数");
-            System.out.println("  exec <id>         - 真执行指定函数(遇到缺失函数可动态添加)");
-            System.out.println("  execall           - 真执行所有函数");
+        System.out.println("  exec <id>         - 真执行指定函数(容错)");
+        System.out.println("  execall           - 真执行所有函数(容错)");
             System.out.println("  disasm <id>       - 反汇编指定函数");
+        System.out.println("  decompile <id>    - 尝试还原伪代码");
             System.out.println("  strings           - 显示捕获的字符串");
             System.out.println("  funcs             - 显示已添加的用户函数");
             System.out.println("  env               - 显示环境变量和已补全的表/方法");
@@ -251,6 +252,14 @@ public class TestDecompiler {
                     }
                     break;
                     
+                case "decompile":
+                    try {
+                        decompileFunction(Integer.parseInt(arg.trim()));
+                    } catch (Exception e) {
+                        System.out.println("用法: decompile <函数ID>");
+                    }
+                    break;
+
                 case "strings":
                     showStrings();
                     break;
@@ -415,6 +424,24 @@ public class TestDecompiler {
         // 设置字符串拦截
         StringInterceptor.enableMemory();
         
+        // 设置容错环境（缺省返回 DummyLuaValue）
+        LuaTable metatable = new LuaTable();
+        metatable.set(LuaValue.INDEX, new VarArgFunction() {
+            @Override
+            public Varargs invoke(Varargs args) {
+                if (execGlobals.get("TOLERANT_MODE").toboolean()) {
+                    LuaValue key = args.arg(2);
+                    String keyStr = key.tojstring();
+                    System.out.println("[TolerantVM] 自动补全全局变量: " + keyStr);
+                    DummyLuaValue dummy = new DummyLuaValue(keyStr);
+                    execGlobals.rawset(key, dummy);
+                    return dummy;
+                }
+                return LuaValue.NIL;
+            }
+        });
+        execGlobals.setmetatable(metatable);
+
         // 拦截string.char来捕获解密后的字符串
         LuaTable stringLib = (LuaTable) execGlobals.get("string");
         stringLib.set("char", new VarArgFunction() {
@@ -460,11 +487,14 @@ public class TestDecompiler {
         }
         
         PrototypeInfo info = functionList.get(id);
-        System.out.println("\n========== 真执行函数 #" + id + ": " + info.name + " ==========");
+        System.out.println("\n========== 真执行函数 #" + id + ": " + info.name + " (容错模式) ==========");
         
         inRealExecution = true;
         StringInterceptor.enableMemory();
         
+        // 启用容错模式
+        execGlobals.set("TOLERANT_MODE", LuaValue.TRUE);
+
         boolean success = tryExecute(info.prototype, 3);
         
         if (success) {
@@ -486,6 +516,10 @@ public class TestDecompiler {
                 closure.call();
                 return true;
             } catch (LuaError e) {
+                if (execGlobals.get("TOLERANT_MODE").toboolean()) {
+                    System.out.println("执行结束 (容错模式下遇到不可恢复错误或结束): " + e.getMessage());
+                    return true;
+                }
                 String msg = e.getMessage();
                 if (msg == null) {
                     System.out.println("执行出错: (未知错误)");
@@ -881,11 +915,14 @@ public class TestDecompiler {
      * 真执行所有函数
      */
     private static void execAllFunctions() {
-        System.out.println("\n========== 真执行所有函数 ==========");
+        System.out.println("\n========== 真执行所有函数 (容错模式) ==========");
         
         StringInterceptor.enableMemory();
         inRealExecution = true;
         
+        // 启用容错模式
+        execGlobals.set("TOLERANT_MODE", LuaValue.TRUE);
+
         for (PrototypeInfo info : functionList) {
             System.out.println("\n--- 执行: " + info.name + " ---");
             try {
@@ -1393,6 +1430,20 @@ public class TestDecompiler {
         disassembleToConsole(info.prototype, info.name);
     }
     
+    /**
+     * 还原伪代码
+     */
+    private static void decompileFunction(int id) {
+        if (id < 0 || id >= functionList.size()) {
+            System.out.println("无效的函数ID");
+            return;
+        }
+
+        PrototypeInfo info = functionList.get(id);
+        System.out.println("\n========== 还原伪代码 #" + id + ": " + info.name + " ==========");
+        System.out.println(PseudoCompiler.decompile(info.prototype));
+    }
+
     /**
      * 显示捕获的字符串
      */
