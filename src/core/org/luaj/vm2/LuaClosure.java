@@ -202,8 +202,11 @@ public class LuaClosure extends LuaFunction {
 		}
 
 		// process instructions
-		boolean tolerantMode = true; // FORCE TOLERANT MODE
+		boolean tolerantMode = false;
 		if (globals != null && globals.get("TOLERANT_MODE").toboolean()) {
+			tolerantMode = true;
+		}
+		if (LuaValue.s_tolerantMode) {
 			tolerantMode = true;
 		}
 
@@ -682,10 +685,15 @@ public class LuaClosure extends LuaFunction {
 						int op = instr & 0x3f;
 						int argA = (instr >> 6) & 0xff;
 						try {
-							if (stack.length > argA) {
+							if (stack != null && stack.length > argA) {
 								stack[argA] = new org.luaj.vm2.decompiler.DummyLuaValue("Recovered_" + op);
 							}
 						} catch (Throwable t) {}
+
+						// Handle specific JMP/Control flow skips for safe recovery
+						if (op == Lua.OP_TEST || op == Lua.OP_TESTSET || op == Lua.OP_EQ || op == Lua.OP_LT || op == Lua.OP_LE) {
+						    pc++; // Skip the conditional JMP safely
+						}
 						// 继续执行下一条指令
 					} else {
 						if (ex instanceof LuaError) throw (LuaError) ex;

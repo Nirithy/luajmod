@@ -226,7 +226,8 @@ public class TestDecompiler {
         System.out.println("  exec <id>         - 真执行指定函数(容错)");
         System.out.println("  execall           - 真执行所有函数(容错)");
             System.out.println("  disasm <id>       - 反汇编指定函数");
-        System.out.println("  decompile <id>    - 尝试还原伪代码");
+        System.out.println("  decompile <id>    - 尝试还原伪代码(含CFG)");
+        System.out.println("  cfg <id>          - 显示控制流图(Basic Blocks)");
             System.out.println("  strings           - 显示捕获的字符串");
             System.out.println("  funcs             - 显示已添加的用户函数");
             System.out.println("  env               - 显示环境变量和已补全的表/方法");
@@ -297,6 +298,14 @@ public class TestDecompiler {
                         decompileFunction(Integer.parseInt(arg.trim()));
                     } catch (Exception e) {
                         System.out.println("用法: decompile <函数ID>");
+                    }
+                    break;
+
+                case "cfg":
+                    try {
+                        showCFG(Integer.parseInt(arg.trim()));
+                    } catch (Exception e) {
+                        System.out.println("用法: cfg <函数ID>");
                     }
                     break;
 
@@ -1482,6 +1491,40 @@ public class TestDecompiler {
         PrototypeInfo info = functionList.get(id);
         System.out.println("\n========== 还原伪代码 #" + id + ": " + info.name + " ==========");
         System.out.println(PseudoCompiler.decompile(info.prototype));
+    }
+
+    /**
+     * 显示控制流图
+     */
+    private static void showCFG(int id) {
+        if (id < 0 || id >= functionList.size()) {
+            System.out.println("无效的函数ID");
+            return;
+        }
+
+        PrototypeInfo info = functionList.get(id);
+        System.out.println("\n========== 函数 #" + id + ": " + info.name + " 控制流图 ==========");
+
+        List<CFGBuilder.BasicBlock> blocks = CFGBuilder.buildCFG(info.prototype);
+        if (blocks.isEmpty()) {
+            System.out.println("无控制流信息 (空函数或无指令)。");
+            return;
+        }
+
+        for (CFGBuilder.BasicBlock b : blocks) {
+            System.out.println("Block #" + b.id + " [PC: " + b.startPc + " - " + b.endPc + "]");
+
+            System.out.print("  InEdges:  ");
+            if (b.inEdges.isEmpty()) System.out.print("(none)");
+            for (CFGBuilder.BasicBlock in : b.inEdges) System.out.print("Block#" + in.id + " ");
+            System.out.println();
+
+            System.out.print("  OutEdges: ");
+            if (b.outEdges.isEmpty()) System.out.print("(none)");
+            for (CFGBuilder.BasicBlock out : b.outEdges) System.out.print("Block#" + out.id + " ");
+            System.out.println();
+            System.out.println();
+        }
     }
 
     /**
