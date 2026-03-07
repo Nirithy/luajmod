@@ -37,7 +37,7 @@ import org.luaj.vm2.LuaValue;
 import org.luaj.vm2.Print;
 import org.luaj.vm2.Varargs;
 import org.luaj.vm2.lib.jse.JsePlatform;
-import org.luaj.vm2.luajc.LuaJC;
+
 import org.luaj.vm2.decompiler.TestDecompiler;
 
 
@@ -149,7 +149,7 @@ public class lua {
 			
 			// new lua state
 			globals = nodebug? JsePlatform.standardGlobals(): JsePlatform.debugGlobals();
-			if ( luajc ) LuaJC.install(globals);
+
 			
 			// 启用调试器
 			if ( debugger ) {
@@ -334,6 +334,7 @@ public class lua {
 						if (!arg.isEmpty()) {
 							debugger = false;
 							decompile = false;
+							print = false;
 							processScript(new FileInputStream(arg), arg, null, 0);
 						}
 						break;
@@ -346,6 +347,7 @@ public class lua {
 						if (!arg.isEmpty()) {
 							debugger = true;
 							decompile = false;
+							print = false;
 							LuaDebugger dbg = LuaDebugger.getInstance();
 							dbg.setGlobalEnv(globals);
 							dbg.enable(true);
@@ -360,7 +362,9 @@ public class lua {
 							arg = reader.readLine().trim();
 						}
 						if (!arg.isEmpty()) {
+							debugger = false;
 							decompile = true;
+							print = false;
 							processScript(new FileInputStream(arg), arg, null, 0);
 						}
 						break;
@@ -371,6 +375,8 @@ public class lua {
 							arg = reader.readLine().trim();
 						}
 						if (!arg.isEmpty()) {
+							debugger = false;
+							decompile = false;
 							print = true;
 							processScript(new FileInputStream(arg), arg, null, 0);
 						}
@@ -382,12 +388,18 @@ public class lua {
 							arg = reader.readLine().trim();
 						}
 						if (!arg.isEmpty()) {
+							debugger = false;
+							decompile = false;
+							print = false;
 							processScript(new ByteArrayInputStream(arg.getBytes()), "=eval", null, 0);
 						}
 						break;
 						
 					default:
 						// 尝试作为Lua代码执行
+						debugger = false;
+						decompile = false;
+						print = false;
 						processScript(new ByteArrayInputStream(line.getBytes()), "=stdin", null, 0);
 						break;
 				}
